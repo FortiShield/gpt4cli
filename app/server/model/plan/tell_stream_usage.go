@@ -1,8 +1,11 @@
 package plan
 
 import (
-	"log"
+	"fmt"
 	"gpt4cli-server/hooks"
+	"gpt4cli-server/notify"
+	"log"
+	"runtime/debug"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/sashabaranov/go-openai"
@@ -24,8 +27,16 @@ func (state *activeTellStreamState) handleUsageChunk(usage *openai.Usage) {
 	sessionId := state.activePlan.SessionId
 
 	modelConfig := state.modelConfig
+	baseModelConfig := modelConfig.GetBaseModelConfig(state.authVars, state.settings)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("panic in handleUsageChunk: %v\n%s", r, debug.Stack())
+				go notify.NotifyErr(notify.SeverityError, fmt.Errorf("panic in handleUsageChunk: %v\n%s", r, debug.Stack()))
+			}
+		}()
+
 		_, apiErr := hooks.ExecHook(hooks.DidSendModelRequest, hooks.HookParams{
 			Auth: auth,
 			Plan: plan,
@@ -33,10 +44,11 @@ func (state *activeTellStreamState) handleUsageChunk(usage *openai.Usage) {
 				InputTokens:    usage.PromptTokens,
 				OutputTokens:   usage.CompletionTokens,
 				CachedTokens:   cachedTokens,
-				ModelId:        modelConfig.BaseModelConfig.ModelId,
-				ModelName:      modelConfig.BaseModelConfig.ModelName,
-				ModelProvider:  modelConfig.BaseModelConfig.Provider,
-				ModelPackName:  state.settings.ModelPack.Name,
+				ModelId:        baseModelConfig.ModelId,
+				ModelTag:       baseModelConfig.ModelTag,
+				ModelName:      baseModelConfig.ModelName,
+				ModelProvider:  baseModelConfig.Provider,
+				ModelPackName:  state.settings.GetModelPack().Name,
 				ModelRole:      modelConfig.Role,
 				Purpose:        "Response",
 				GenerationId:   generationId,
@@ -78,18 +90,27 @@ func (state *activeTellStreamState) execHookOnStop(sendStreamErr bool) {
 	}
 
 	modelConfig := state.modelConfig
+	baseModelConfig := modelConfig.GetBaseModelConfig(state.authVars, state.settings)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("panic in execHookOnStop: %v\n%s", r, debug.Stack())
+				go notify.NotifyErr(notify.SeverityError, fmt.Errorf("panic in execHookOnStop: %v\n%s", r, debug.Stack()))
+			}
+		}()
+
 		_, apiErr := hooks.ExecHook(hooks.DidSendModelRequest, hooks.HookParams{
 			Auth: auth,
 			Plan: plan,
 			DidSendModelRequestParams: &hooks.DidSendModelRequestParams{
 				InputTokens:     state.totalRequestTokens,
 				OutputTokens:    active.NumTokens,
-				ModelId:         modelConfig.BaseModelConfig.ModelId,
-				ModelName:       modelConfig.BaseModelConfig.ModelName,
-				ModelProvider:   modelConfig.BaseModelConfig.Provider,
-				ModelPackName:   state.settings.ModelPack.Name,
+				ModelId:         baseModelConfig.ModelId,
+				ModelTag:        baseModelConfig.ModelTag,
+				ModelName:       baseModelConfig.ModelName,
+				ModelProvider:   baseModelConfig.Provider,
+				ModelPackName:   state.settings.GetModelPack().Name,
 				ModelRole:       modelConfig.Role,
 				Purpose:         "Response",
 				GenerationId:    generationId,

@@ -104,6 +104,19 @@ You ABSOLUTELY MUST NOT overwrite or delete code from the original file unless t
 
 Pay *EXTREMELY close attention* to opening and closing brackets, parentheses, and braces. Never leave them unbalanced when the changes are applied. Also pay *EXTREMELY close attention* to newlines and indentation. Make sure that the indentation of the new code is consistent with the indentation of the original code, and syntactically correct.
 
+**Additional Robustness Requirements:**
+
+- **Syntax Validation:** After applying all changes, you MUST validate that the resulting file is syntactically correct for its language. If the changes would result in a syntax error, you MUST adjust the changes to avoid this.
+
+- **Preserve File-Level Constructs:** You MUST always preserve file-level constructs such as package declarations, import statements, and module headers, unless the plan explicitly instructs you to modify or remove them.
+  - For example, in Go files, always preserve the `package` line and all `import` blocks unless the plan says otherwise.
+  - In Python, always preserve the encoding declaration and module docstring if present.
+  - In JavaScript/TypeScript, always preserve the module imports/exports unless the plan says otherwise.
+
+- **Preserve Encoding and Line Endings:** You MUST preserve the original file's encoding and line ending style (e.g., LF vs. CRLF). Do not introduce or change line ending styles or file encodings.
+
+- **Validate Structural Integrity:** Ensure that all code blocks, functions, classes, and other structural elements remain properly nested and complete after applying changes.
+
 The 'listChangesWithLineNums' function MUST be called *valid JSON*. Double quotes within json properties of the 'listChangesWithLineNums' function call parameters JSON object *must be properly escaped* with a backslash. Pay careful attention to newlines, tabs, and other special characters. The JSON object must be properly formatted and must include all required keys. **You generate perfect JSON -every- time**, no matter how many quotes or special characters are in the input. You must always call 'listChangesWithLineNums' with a valid JSON object. Don't call any other function.
 
 [END YOUR INSTRUCTIONS]

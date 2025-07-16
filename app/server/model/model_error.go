@@ -2,9 +2,9 @@ package model
 
 import (
 	"fmt"
+	shared "gpt4cli-shared"
 	"log"
 	"net/http"
-	shared "gpt4cli-shared"
 	"regexp"
 	"strconv"
 	"strings"
@@ -36,6 +36,8 @@ var reTryAgain = regexp.MustCompile(
 )
 
 func ClassifyErrMsg(msg string) *shared.ModelError {
+	log.Printf("Classifying error message: %s", msg)
+
 	msg = strings.ToLower(msg)
 
 	if strings.Contains(msg, "maximum context length") ||
@@ -49,6 +51,7 @@ func ClassifyErrMsg(msg string) *shared.ModelError {
 		strings.Contains(msg, "input too large") ||
 		strings.Contains(msg, "input is too long") ||
 		strings.Contains(msg, "input too long") {
+		log.Printf("Context too long error: %s", msg)
 		return &shared.ModelError{
 			Kind:              shared.ErrContextTooLong,
 			Retriable:         false,
@@ -62,6 +65,7 @@ func ClassifyErrMsg(msg string) *shared.ModelError {
 		strings.Contains(msg, "model is currently overloaded") ||
 		strings.Contains(msg, "overloaded_error") ||
 		strings.Contains(msg, "resource has been exhausted") {
+		log.Printf("Overloaded error: %s", msg)
 		return &shared.ModelError{
 			Kind:              shared.ErrOverloaded,
 			Retriable:         true,
@@ -70,12 +74,15 @@ func ClassifyErrMsg(msg string) *shared.ModelError {
 	}
 
 	if strings.Contains(msg, "cache control") {
+		log.Printf("Cache control error: %s", msg)
 		return &shared.ModelError{
 			Kind:              shared.ErrCacheSupport,
 			Retriable:         true,
 			RetryAfterSeconds: 0,
 		}
 	}
+
+	log.Println("No error classification based on message")
 
 	return nil
 }
@@ -86,6 +93,7 @@ func ClassifyModelError(code int, message string, headers http.Header) shared.Mo
 	// first try to classify the error based on the message only
 	msgRes := ClassifyErrMsg(msg)
 	if msgRes != nil {
+		log.Printf("Classified error message: %+v", msgRes)
 		return *msgRes
 	}
 
@@ -115,7 +123,7 @@ func ClassifyModelError(code int, message string, headers http.Header) shared.Mo
 	default:
 		res = shared.ModelError{
 			Kind:              shared.ErrOther,
-			Retriable:         code >= 500,
+			Retriable:         code >= 500 || strings.Contains(msg, "provider returned error"), // 'provider returned error' is from OpenRouter, and unless it's a non-retriable status code, it should still be retried since OpenRouter may switch to a different provider
 			RetryAfterSeconds: 0,
 		}
 	}

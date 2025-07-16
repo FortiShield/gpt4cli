@@ -5,6 +5,7 @@ import (
 	"gpt4cli-server/notify"
 	"log"
 	"net/http"
+	"runtime/debug"
 
 	shared "gpt4cli-shared"
 )
@@ -15,6 +16,7 @@ func (state *activeTellStreamState) queuePendingBuilds() {
 	branch := state.branch
 	auth := state.auth
 	clients := state.clients
+	authVars := state.authVars
 	currentOrgId := state.currentOrgId
 	currentUserId := state.currentUserId
 	active := GetActivePlan(planId, branch)
@@ -23,6 +25,18 @@ func (state *activeTellStreamState) queuePendingBuilds() {
 		log.Printf("execTellPlan: Active plan not found for plan ID %s on branch %s\n", planId, branch)
 		return
 	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("panic in queuePendingBuilds: %v\n%s", r, debug.Stack())
+			go notify.NotifyErr(notify.SeverityError, fmt.Errorf("error getting pending builds by path: %v", r))
+			active.StreamDoneCh <- &shared.ApiError{
+				Type:   shared.ApiErrorTypeOther,
+				Status: http.StatusInternalServerError,
+				Msg:    fmt.Sprintf("Error getting pending builds by path: %v\n%s", r, debug.Stack()),
+			}
+		}
+	}()
 
 	pendingBuildsByPath, err := active.PendingBuildsByPath(auth.OrgId, auth.User.Id, state.convo)
 
@@ -33,7 +47,7 @@ func (state *activeTellStreamState) queuePendingBuilds() {
 		active.StreamDoneCh <- &shared.ApiError{
 			Type:   shared.ApiErrorTypeOther,
 			Status: http.StatusInternalServerError,
-			Msg:    "Error getting pending builds by path",
+			Msg:    fmt.Sprintf("Error getting pending builds by path: %v", err),
 		}
 		return
 	}
@@ -49,6 +63,7 @@ func (state *activeTellStreamState) queuePendingBuilds() {
 	buildState := &activeBuildStreamState{
 		modelStreamId: active.ModelStreamId,
 		clients:       clients,
+		authVars:      authVars,
 		auth:          auth,
 		currentOrgId:  currentOrgId,
 		currentUserId: currentUserId,

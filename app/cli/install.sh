@@ -7,7 +7,7 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 PLATFORM=
 ARCH=
 VERSION=
-RELEASES_URL="https://github.com/khulnasoft/gpt4cli/releases/download"
+RELEASES_URL="https://github.com/khulnasoft-lab/gpt4cli/releases/download"
 
  # Ensure cleanup happens on exit and on specific signals
 trap cleanup EXIT
@@ -63,7 +63,7 @@ fi
 
 # Set Version
 if [[ -z "${GPT4CLI_VERSION}" ]]; then
-  VERSION=$(curl -sL https://gpt4cli.ai/v2/cli-version.txt)
+  VERSION=$(curl -sL https://gpt4cli.khulnasoft.com/v2/cli-version.txt)
 else
   VERSION=$GPT4CLI_VERSION
   echo "Using custom version $VERSION"
@@ -202,9 +202,9 @@ echo "⚡️ Run 'gpt4cli' or 'g4c' in any project directory and start building!
 echo ""
 echo "$(printf '%*s' "$(tput cols)" '' | tr ' ' -)"
 echo ""
-echo "📚 Need help? 👉 https://docs.gpt4cli.ai"
+echo "📚 Need help? 👉 https://docs-gpt4cli.khulnasoft.com"
 echo ""
-echo "👋 Join a community of AI builders 👉 https://discord.gg/khulnasoft"
+echo "👋 Join a community of AI builders 👉 https://discord.gg/khulnasoft-lab"
 echo ""
 echo "$(printf '%*s' "$(tput cols)" '' | tr ' ' -)"
 echo ""

@@ -3,6 +3,9 @@ package db
 import (
 	"fmt"
 	shared "gpt4cli-shared"
+	"log"
+	"runtime"
+	"runtime/debug"
 )
 
 type invalidateConflictedResultsParams struct {
@@ -74,6 +77,14 @@ func invalidateConflictedResults(params invalidateConflictedResultsParams) error
 
 		for _, desc := range toUpdateDescs {
 			go func(desc *ConvoMessageDescription) {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("panic in StoreDescription: %v\n%s", r, debug.Stack())
+						errCh <- fmt.Errorf("panic in StoreDescription: %v\n%s", r, debug.Stack())
+						runtime.Goexit() // don't allow outer function to continue and double-send to channel
+					}
+				}()
+
 				err := StoreDescription(desc)
 
 				if err != nil {

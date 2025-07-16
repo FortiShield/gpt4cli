@@ -9,6 +9,8 @@ import (
 	"gpt4cli-server/types"
 	"log"
 	"net/http"
+	"runtime"
+	"runtime/debug"
 
 	shared "gpt4cli-shared"
 )
@@ -87,11 +89,12 @@ func loadContexts(
 
 	var settings *shared.PlanSettings
 	var clients map[string]model.ClientInfo
+	var authVars map[string]string
 
 	for _, context := range *loadReq {
 		if context.ContextType == shared.ContextPipedDataType || context.ContextType == shared.ContextNoteType || context.ContextType == shared.ContextImageType {
 
-			settings, err = db.GetPlanSettings(plan, true)
+			settings, err = db.GetPlanSettings(plan)
 
 			if err != nil {
 				log.Printf("Error getting plan settings: %v\n", err)
@@ -99,16 +102,20 @@ func loadContexts(
 				return nil, nil
 			}
 
-			clients = initClients(
+			res := initClients(
 				initClientsParams{
 					w:           w,
 					auth:        auth,
 					apiKeys:     context.ApiKeys,
-					openAIBase:  context.OpenAIBase,
 					openAIOrgId: context.OpenAIOrgId,
+					authVars:    context.AuthVars,
 					plan:        plan,
+					settings:    settings,
 				},
 			)
+
+			clients = res.clients
+			authVars = res.authVars
 
 			break
 		}
@@ -117,9 +124,9 @@ func loadContexts(
 	// ensure image compatibility if we're loading an image
 	for _, context := range *loadReq {
 		if context.ContextType == shared.ContextImageType {
-			if !settings.ModelPack.Planner.BaseModelConfig.HasImageSupport {
-				log.Printf("Error loading context: %s does not support images in context\n", settings.ModelPack.Planner.BaseModelConfig.ModelName)
-				http.Error(w, fmt.Sprintf("Error loading context: %s does not support images in context", settings.ModelPack.Planner.BaseModelConfig.ModelName), http.StatusBadRequest)
+			if !settings.GetModelPack().Planner.GetSharedBaseConfig(settings).HasImageSupport {
+				log.Printf("Error loading context: %s does not support images in context\n", settings.GetModelPack().Planner.ModelId)
+				http.Error(w, fmt.Sprintf("Error loading context: %s does not support images in context", settings.GetModelPack().Planner.ModelId), http.StatusBadRequest)
 				return nil, nil
 			}
 		}
@@ -133,7 +140,24 @@ func loadContexts(
 			num++
 
 			go func(context *shared.LoadContextParams) {
-				name, err := model.GenPipedDataName(r.Context(), auth, plan, settings, clients, context.Body, context.SessionId)
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("panic in GenPipedDataName: %v\n%s", r, debug.Stack())
+						errCh <- fmt.Errorf("panic in GenPipedDataName: %v\n%s", r, debug.Stack())
+						runtime.Goexit() // don't allow outer function to continue and double-send to channel
+					}
+				}()
+
+				name, err := model.GenPipedDataName(model.GenPipedDataNameParams{
+					Ctx:          r.Context(),
+					Auth:         auth,
+					Plan:         plan,
+					Settings:     settings,
+					AuthVars:     authVars,
+					SessionId:    context.SessionId,
+					Clients:      clients,
+					PipedContent: context.Body,
+				})
 
 				if err != nil {
 					errCh <- fmt.Errorf("error generating name for piped data: %v", err)
@@ -147,7 +171,15 @@ func loadContexts(
 			num++
 
 			go func(context *shared.LoadContextParams) {
-				name, err := model.GenNoteName(r.Context(), auth, plan, settings, clients, context.Body, context.SessionId)
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("panic in GenNoteName: %v\n%s", r, debug.Stack())
+						errCh <- fmt.Errorf("panic in GenNoteName: %v\n%s", r, debug.Stack())
+						runtime.Goexit() // don't allow outer function to continue and double-send to channel
+					}
+				}()
+
+				name, err := model.GenNoteName(r.Context(), auth, plan, settings, clients, authVars, context.Body, context.SessionId)
 
 				if err != nil {
 					errCh <- fmt.Errorf("error generating name for note: %v", err)

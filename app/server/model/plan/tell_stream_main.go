@@ -1,6 +1,7 @@
 package plan
 
 import (
+	"errors"
 	"fmt"
 	"gpt4cli-server/model"
 	"gpt4cli-server/notify"
@@ -8,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	shared "gpt4cli-shared"
@@ -55,14 +57,16 @@ func (state *activeTellStreamState) listenStream(stream *model.ExtendedChatCompl
 	}
 
 	// Create a timer that will trigger if no chunk is received within the specified duration
-	firstTokenTimeout := firstTokenTimeout(state.totalRequestTokens)
+	firstTokenTimeout := firstTokenTimeout(state.totalRequestTokens, state.baseModelConfig.LocalOnly)
 	log.Printf("listenStream - firstTokenTimeout: %s\n", firstTokenTimeout)
 	timer := time.NewTimer(firstTokenTimeout)
 	defer timer.Stop()
 	streamFinished := false
 
-	modelProvider := state.modelConfig.BaseModelConfig.Provider
-	modelName := state.modelConfig.BaseModelConfig.ModelName
+	baseModelConfig := state.modelConfig.GetBaseModelConfig(state.authVars, state.settings)
+
+	modelProvider := baseModelConfig.Provider
+	modelName := baseModelConfig.ModelName
 
 	respCh := make(chan *types.ExtendedChatCompletionStreamResponse)
 	streamErrCh := make(chan error)
@@ -122,13 +126,17 @@ mainLoop:
 			state.execHookOnStop(true)
 
 			var msg string
+			name := modelName
+			if !strings.Contains(string(modelName), string(modelProvider)) {
+				name = shared.ModelName(fmt.Sprintf("%s/%s", modelProvider, modelName))
+			}
 			if active.CurrentReplyContent == "" {
-				msg = fmt.Sprintf("The AI model (%s/%s) didn't respond: %v", modelProvider, modelName, err)
+				msg = fmt.Sprintf("The AI model (%s) didn't respond: %v", name, err)
 			} else {
-				msg = fmt.Sprintf("The AI model (%s/%s) stopped responding: %v", modelProvider, modelName, err)
+				msg = fmt.Sprintf("The AI model (%s) stopped responding: %v", name, err)
 			}
 			state.onError(onErrorParams{
-				streamErr: fmt.Errorf(msg, err),
+				streamErr: errors.New(msg),
 				storeDesc: true,
 				canRetry:  active.CurrentReplyContent == "", // if there was no output yet, we can retry
 			})
@@ -274,13 +282,19 @@ mainLoop:
 	}
 }
 
-func firstTokenTimeout(tok int) time.Duration {
+func firstTokenTimeout(tok int, isLocalModel bool) time.Duration {
 	const (
 		base  = 90 * time.Second
 		slope = 90 * time.Second
 		step  = 150_000
 		cap   = 15 * time.Minute
 	)
+
+	// local models can have a long cold start, and timeouts are less relevant
+	if isLocalModel {
+		return cap
+	}
+
 	if tok <= step {
 		return base
 	}

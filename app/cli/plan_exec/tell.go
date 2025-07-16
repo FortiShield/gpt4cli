@@ -12,6 +12,7 @@ import (
 	"gpt4cli-cli/ui"
 	"log"
 	"os"
+	"time"
 
 	shared "gpt4cli-shared"
 
@@ -40,6 +41,7 @@ func TellPlan(
 	autoApply := flags.AutoApply
 	isApplyDebug := flags.IsApplyDebug
 	isImplementationOfChat := flags.IsImplementationOfChat
+	skipChangesMenu := flags.SkipChangesMenu
 	done := make(chan struct{})
 
 	if prompt == "" && isImplementationOfChat {
@@ -60,6 +62,15 @@ func TellPlan(
 	}
 
 	term.StartSpinner("")
+
+	err := PromptSyncModelsIfNeeded()
+	if err != nil {
+		outputPromptIfTell()
+		term.OutputErrorAndExit("Error syncing models: %v", err)
+	}
+
+	term.StartSpinner("")
+
 	contexts, apiErr := api.Client.ListContext(params.CurrentPlanId, params.CurrentBranch)
 
 	if apiErr != nil {
@@ -113,18 +124,6 @@ func TellPlan(
 
 		term.StartSpinner("")
 
-		var legacyApiKey, openAIBase, openAIOrgId string
-
-		if params.ApiKeys["OPENAI_API_KEY"] != "" {
-			openAIBase = os.Getenv("OPENAI_API_BASE")
-			if openAIBase == "" {
-				openAIBase = os.Getenv("OPENAI_ENDPOINT")
-			}
-
-			legacyApiKey = params.ApiKeys["OPENAI_API_KEY"]
-			openAIOrgId = params.ApiKeys["OPENAI_ORG_ID"]
-		}
-
 		var osDetails string
 		if execEnabled {
 			osDetails = term.GetOsDetails()
@@ -145,11 +144,7 @@ func TellPlan(
 			SmartContext:           smartContext,
 			ExecEnabled:            execEnabled,
 			OsDetails:              osDetails,
-			ApiKey:                 legacyApiKey, // deprecated
-			Endpoint:               openAIBase,   // deprecated
-			ApiKeys:                params.ApiKeys,
-			OpenAIBase:             openAIBase,
-			OpenAIOrgId:            openAIOrgId,
+			AuthVars:               params.AuthVars,
 			IsImplementationOfChat: isImplementationOfChat,
 			IsGitRepo:              isGitRepo,
 			SessionId:              os.Getenv("GPT4CLI_REPL_SESSION_ID"),
@@ -235,8 +230,13 @@ func TellPlan(
 				} else if autoApply || isDebugCmd || isApplyDebug {
 					term.StopSpinner()
 					// do nothing, allow auto apply to run
+				} else if skipChangesMenu {
+					term.StopSpinner()
+					// script mode, don't show menu
 				} else {
 					term.StartSpinner("")
+					// sleep a little to prevent lock contention on server
+					time.Sleep(500 * time.Millisecond)
 					diffs, apiErr := getDiffs(params)
 					term.StopSpinner()
 					if apiErr != nil {

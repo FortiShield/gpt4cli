@@ -39,10 +39,12 @@ func (state *activeTellStreamState) addConversationMessages() bool {
 
 	conversationTokens := 0
 	tokensUpToTimestamp := make(map[int64]int)
+	convoMessagesById := make(map[string]*db.ConvoMessage)
 	for _, convoMessage := range convo {
 		conversationTokens += convoMessage.Tokens + model.TokensPerMessage + model.TokensPerName
 		timestamp := convoMessage.CreatedAt.UnixNano() / int64(time.Millisecond)
 		tokensUpToTimestamp[timestamp] = conversationTokens
+		convoMessagesById[convoMessage.Id] = convoMessage
 		// log.Printf("Timestamp: %s | Tokens: %d | Total: %d | conversationTokens\n", convoMessage.Timestamp, convoMessage.Tokens, conversationTokens)
 	}
 
@@ -76,25 +78,32 @@ func (state *activeTellStreamState) addConversationMessages() bool {
 			log.Printf("Tokens up to timestamp: %d\n", tokens)
 
 			if !ok {
-				err := fmt.Errorf("conversation summary timestamp not found in conversation")
-				log.Printf("Error: %v\n", err)
+				// try a fallback by id instead of timestamp, in case timestamp rounding caused it to be missing
+				convoMessage, ok := convoMessagesById[s.LatestConvoMessageId]
 
-				log.Println("timestamp:", timestamp)
-
-				// log.Println("Conversation summary:")
-				// spew.Dump(s)
-
-				log.Println("tokensUpToTimestamp:")
-				log.Println(spew.Sdump(tokensUpToTimestamp))
-
-				go notify.NotifyErr(notify.SeverityError, fmt.Errorf("conversation summary timestamp not found in conversation"))
-
-				active.StreamDoneCh <- &shared.ApiError{
-					Type:   shared.ApiErrorTypeOther,
-					Status: http.StatusInternalServerError,
-					Msg:    "Conversation summary timestamp not found in conversation",
+				if ok {
+					timestamp = convoMessage.CreatedAt.UnixNano() / int64(time.Millisecond)
+					tokens, ok = tokensUpToTimestamp[timestamp]
 				}
-				return false
+
+				if !ok {
+					// instead of erroring here as we did previously, we'll just log and continue
+					// if no summary is found, we still handle it as an error below
+					// but this way we don't error out completely for  a single detached summary
+
+					log.Println("conversation summary timestamp not found in conversation")
+					log.Println("timestamp:", timestamp)
+
+					// log.Println("Conversation summary:")
+					// spew.Dump(s)
+
+					log.Println("tokensUpToTimestamp:")
+					log.Println(spew.Sdump(tokensUpToTimestamp))
+
+					go notify.NotifyErr(notify.SeverityInfo, fmt.Errorf("conversation summary timestamp not found in conversation"))
+
+					continue
+				}
 			}
 
 			updatedConversationTokens := (conversationTokens - tokens) + s.Tokens
@@ -121,7 +130,7 @@ func (state *activeTellStreamState) addConversationMessages() bool {
 			active.StreamDoneCh <- &shared.ApiError{
 				Type:   shared.ApiErrorTypeOther,
 				Status: http.StatusInternalServerError,
-				Msg:    "Exceeded token limit",
+				Msg:    "Couldn't get under token limit with conversation summary",
 			}
 			return false
 		}
@@ -234,7 +243,7 @@ type summarizeConvoParams struct {
 	modelPackName         string
 }
 
-func summarizeConvo(clients map[string]model.ClientInfo, config shared.ModelRoleConfig, params summarizeConvoParams, ctx context.Context) *shared.ApiError {
+func summarizeConvo(clients map[string]model.ClientInfo, authVars map[string]string, settings *shared.PlanSettings, params summarizeConvoParams, ctx context.Context) *shared.ApiError {
 	plan := params.plan
 	planId := plan.Id
 	log.Printf("summarizeConvo: Called for plan ID %s on branch %s\n", planId, params.branch)
@@ -246,6 +255,8 @@ func summarizeConvo(clients map[string]model.ClientInfo, config shared.ModelRole
 	userPrompt := params.userPrompt
 	currentReply := params.currentReply
 	active := GetActivePlan(planId, branch)
+
+	config := settings.GetModelPack().PlanSummary
 
 	if active == nil {
 		log.Printf("Active plan not found for plan ID %s and branch %s\n", planId, branch)
@@ -383,7 +394,7 @@ func summarizeConvo(clients map[string]model.ClientInfo, config shared.ModelRole
 	// latestSummaryCh := make(chan *db.ConvoSummary, 1)
 	// active.LatestSummaryCh = latestSummaryCh
 
-	summary, apiErr := model.PlanSummary(clients, config, model.PlanSummaryParams{
+	summary, apiErr := model.PlanSummary(clients, authVars, settings, config, model.PlanSummaryParams{
 		Conversation:                summaryMessages,
 		ConversationNumTokens:       numTokens,
 		LatestConvoMessageId:        latestMessageId,

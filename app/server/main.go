@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"gpt4cli-server/model"
 	"gpt4cli-server/routes"
 	"gpt4cli-server/setup"
 	"log"
@@ -15,6 +17,14 @@ func main() {
 
 	routes.RegisterHandleGpt4cli(func(router *mux.Router, path string, isStreaming bool, handler routes.Gpt4cliHandler) *mux.Route {
 		return router.HandleFunc(path, handler)
+	})
+
+	err := model.EnsureLiteLLM(2)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to start LiteLLM proxy: %v", err))
+	}
+	setup.RegisterShutdownHook(func() {
+		model.ShutdownLiteLLMServer()
 	})
 
 	r := mux.NewRouter()

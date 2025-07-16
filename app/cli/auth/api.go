@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"gpt4cli-cli/types"
+	"gpt4cli-cli/version"
 	"net/http"
 
 	shared "gpt4cli-shared"
@@ -40,4 +41,8 @@ func SetAuthHeader(req *http.Request) error {
 	req.Header.Set("Authorization", "Bearer "+token)
 
 	return nil
+}
+
+func SetVersionHeader(req *http.Request) {
+	req.Header.Set("X-Client-Version", version.Version)
 }

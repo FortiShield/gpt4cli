@@ -5,10 +5,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	shared "gpt4cli-shared"
 	"log"
 	"os"
 	"path/filepath"
-	shared "gpt4cli-shared"
 )
 
 func GetCachedMap(orgId, projectId, filePath string) (*Context, error) {

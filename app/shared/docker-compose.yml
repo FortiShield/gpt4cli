@@ -14,15 +14,23 @@ services:
       - gpt4cli-network
   gpt4cli-server:
     image: gpt4cliai/gpt4cli-server:latest
+    # build:
+    #   context: .
+    #   dockerfile: server/Dockerfile
     volumes:
       - gpt4cli-files:/gpt4cli-server
     ports:
       - "8099:8099"
+      - "4000:4000"
     environment:
       DATABASE_URL: "postgres://gpt4cli:gpt4cli@gpt4cli-postgres:5432/gpt4cli?sslmode=disable"
       GOENV: development
       LOCAL_MODE: 1
       GPT4CLI_BASE_DIR: /gpt4cli-server
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - gpt4cli-network
     depends_on:

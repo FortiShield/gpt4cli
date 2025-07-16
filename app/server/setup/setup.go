@@ -2,14 +2,17 @@ package setup
 
 import (
 	"context"
+	"fmt"
 	"gpt4cli-server/db"
 	"gpt4cli-server/host"
 	"gpt4cli-server/model/plan"
+	"gpt4cli-server/notify"
 	"gpt4cli-server/shutdown"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 	"time"
 )
@@ -51,6 +54,7 @@ func loggingMiddleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+
 		start := time.Now()
 
 		log.Printf("\n\nRequest: %s %s\n\n", r.Method, r.URL.Path)
@@ -125,7 +129,13 @@ func StartServer(handler http.Handler, configureFn func(handler http.Handler) ht
 
 	// Start goroutine to monitor active plans
 	go func() {
-		defer close(plansDone)
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("panic in waitForActivePlans: %v\n%s", r, debug.Stack())
+				go notify.NotifyErr(notify.SeverityError, fmt.Errorf("panic in waitForActivePlans: %v\n%s", r, debug.Stack()))
+			}
+			close(plansDone)
+		}()
 
 		// First wait for active plans to complete or timeout
 		log.Println("Waiting for active plans to complete...")

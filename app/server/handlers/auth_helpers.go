@@ -16,6 +16,7 @@ import (
 	shared "gpt4cli-shared"
 
 	"github.com/jmoiron/sqlx"
+	"golang.org/x/mod/semver"
 )
 
 func Authenticate(w http.ResponseWriter, r *http.Request, requireOrg bool) *types.ServerAuth {
@@ -95,7 +96,7 @@ func ClearAuthCookieIfBrowser(w http.ResponseWriter, r *http.Request) error {
 
 	var domain string
 	if os.Getenv("GOENV") == "production" {
-		domain = os.Getenv("APP_SUBDOMAIN") + ".gpt4cli.ai"
+		domain = os.Getenv("APP_SUBDOMAIN") + ".gpt4cli.khulnasoft.com"
 	}
 
 	// Clear the authToken cookie
@@ -142,7 +143,7 @@ func ClearAccountFromCookies(w http.ResponseWriter, r *http.Request, userId stri
 	// Set the updated accounts cookie
 	var domain string
 	if os.Getenv("GOENV") == "production" {
-		domain = os.Getenv("APP_SUBDOMAIN") + ".gpt4cli.ai"
+		domain = os.Getenv("APP_SUBDOMAIN") + ".gpt4cli.khulnasoft.com"
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     "accounts",
@@ -198,7 +199,7 @@ func SetAuthCookieIfBrowser(w http.ResponseWriter, r *http.Request, user *db.Use
 
 	var domain string
 	if os.Getenv("GOENV") == "production" {
-		domain = os.Getenv("APP_SUBDOMAIN") + ".gpt4cli.ai"
+		domain = os.Getenv("APP_SUBDOMAIN") + ".gpt4cli.khulnasoft.com"
 	}
 
 	cookie := &http.Cookie{
@@ -436,6 +437,27 @@ func ValidateAndSignIn(w http.ResponseWriter, r *http.Request, req shared.SignIn
 	}
 
 	return &resp, nil
+}
+
+func requireMinClientVersion(w http.ResponseWriter, r *http.Request, minVersion string) bool {
+	msg := fmt.Sprintf("Client version is too old for this endpoint. Please upgrade to version %s or later.", minVersion)
+
+	version := r.Header.Get("X-Client-Version")
+	if version == "" {
+		http.Error(w, msg, http.StatusBadRequest)
+		return false
+	}
+
+	if version == "development" {
+		return true
+	}
+
+	if semver.Compare(version, minVersion) < 0 {
+		http.Error(w, msg, http.StatusBadRequest)
+		return false
+	}
+
+	return true
 }
 
 func execAuthenticate(w http.ResponseWriter, r *http.Request, requireOrg bool, raiseErr bool) *types.ServerAuth {

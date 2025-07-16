@@ -35,7 +35,7 @@ func ConvertTrial() {
 	}
 
 	term.StopSpinner()
-	term.OutputErrorAndExit("Timed out waiting for upgrade. Please try again. Email support@gpt4cli.ai if the problem persists.")
+	term.OutputErrorAndExit("Timed out waiting for upgrade. Please try again. Email support@khulnasoft.com if the problem persists.")
 }
 
 func startTrial() {
@@ -83,5 +83,5 @@ func startTrial() {
 	}
 
 	term.StopSpinner()
-	term.OutputErrorAndExit("Timed out waiting for trial to start. Please try again. Email support@gpt4cli.ai if the problem persists.")
+	term.OutputErrorAndExit("Timed out waiting for trial to start. Please try again. Email support@khulnasoft.com if the problem persists.")
 }

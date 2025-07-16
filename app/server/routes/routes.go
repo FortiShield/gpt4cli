@@ -123,7 +123,7 @@ func addApiRoutes(r *mux.Router, prefix string) {
 
 	HandleGpt4cliFn(r, prefix+"/projects/{projectId}/plans", false, handlers.CreatePlanHandler).Methods("POST")
 
-	HandleGpt4cliFn(r, prefix+"/projects/{projectId}/plans", false, handlers.CreatePlanHandler).Methods("DELETE")
+	HandleGpt4cliFn(r, prefix+"/projects/{projectId}/plans", false, handlers.DeleteAllPlansHandler).Methods("DELETE")
 
 	HandleGpt4cliFn(r, prefix+"/plans/{planId}", false, handlers.GetPlanHandler).Methods("GET")
 	HandleGpt4cliFn(r, prefix+"/plans/{planId}", false, handlers.DeletePlanHandler).Methods("DELETE")
@@ -163,13 +163,15 @@ func addApiRoutes(r *mux.Router, prefix string) {
 	HandleGpt4cliFn(r, prefix+"/plans/{planId}/{branch}/build", true, handlers.BuildPlanHandler).Methods("PATCH")
 
 	HandleGpt4cliFn(r, prefix+"/custom_models", false, handlers.ListCustomModelsHandler).Methods("GET")
-	HandleGpt4cliFn(r, prefix+"/custom_models", false, handlers.CreateCustomModelHandler).Methods("POST")
-	HandleGpt4cliFn(r, prefix+"/custom_models/{modelId}", false, handlers.DeleteAvailableModelHandler).Methods("DELETE")
-	HandleGpt4cliFn(r, prefix+"/custom_models/{modelId}", false, handlers.UpdateCustomModelHandler).Methods("PUT")
+	HandleGpt4cliFn(r, prefix+"/custom_models", false, handlers.UpsertCustomModelsHandler).Methods("POST")
+
+	HandleGpt4cliFn(r, prefix+"/custom_models/{modelId}", false, handlers.GetCustomModelHandler).Methods("GET")
+
+	HandleGpt4cliFn(r, prefix+"/custom_providers", false, handlers.ListCustomProvidersHandler).Methods("GET")
+	HandleGpt4cliFn(r, prefix+"/custom_providers/{providerId}", false, handlers.GetCustomProviderHandler).Methods("GET")
 
 	HandleGpt4cliFn(r, prefix+"/model_sets", false, handlers.ListModelPacksHandler).Methods("GET")
 	HandleGpt4cliFn(r, prefix+"/model_sets", false, handlers.CreateModelPackHandler).Methods("POST")
-	HandleGpt4cliFn(r, prefix+"/model_sets/{setId}", false, handlers.DeleteModelPackHandler).Methods("DELETE")
 	HandleGpt4cliFn(r, prefix+"/model_sets/{setId}", false, handlers.UpdateModelPackHandler).Methods("PUT")
 	HandleGpt4cliFn(r, prefix+"/default_settings", false, handlers.GetDefaultSettingsHandler).Methods("GET")
 	HandleGpt4cliFn(r, prefix+"/default_settings", false, handlers.UpdateDefaultSettingsHandler).Methods("PUT")

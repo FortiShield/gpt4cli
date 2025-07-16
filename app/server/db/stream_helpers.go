@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"gpt4cli-server/notify"
 	"log"
+	"runtime/debug"
 	"time"
 
 	shared "gpt4cli-shared"
@@ -39,6 +41,14 @@ func StoreModelStream(stream *ModelStream, ctx context.Context, cancelFn context
 
 	// Start a goroutine to keep the lock alive
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("panic in StoreModelStream: %v\n%s", r, debug.Stack())
+				cancelFn()
+				go notify.NotifyErr(notify.SeverityError, fmt.Errorf("panic in StoreModelStream: %v\n%s", r, debug.Stack()))
+			}
+		}()
+
 		numErrors := 0
 		for {
 			select {

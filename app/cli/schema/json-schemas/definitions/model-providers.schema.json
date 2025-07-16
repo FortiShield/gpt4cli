@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://gpt4cli.khulnasoft.com/schemas/definitions/model-providers.schema.json",
+  "title": "Model Providers",
+  "description": "The built-in model providers that Gpt4cli supports. Use 'custom' for a provider that is not built-in.",
+  "enum": [
+    "openrouter",
+    "openai",
+    "anthropic",
+    "google-ai-studio",
+    "google-vertex",
+    "azure-openai",
+    "deepseek",
+    "perplexity",
+    "custom"
+  ]
+}

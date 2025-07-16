@@ -7,6 +7,7 @@ import (
 	"gpt4cli-server/types"
 	"log"
 	"net/http"
+	"runtime/debug"
 	"time"
 
 	shared "gpt4cli-shared"
@@ -28,6 +29,7 @@ func (state *activeTellStreamState) handleStreamFinished() handleStreamFinishedR
 	plan := state.plan
 	req := state.req
 	clients := state.clients
+	authVars := state.authVars
 	settings := state.settings
 	currentOrgId := state.currentOrgId
 	summaries := state.summaries
@@ -69,13 +71,19 @@ func (state *activeTellStreamState) handleStreamFinished() handleStreamFinishedR
 	}
 
 	autoLoadContextResult := state.checkAutoLoadContext()
-	addedSubtasks := state.checkNewSubtasks()
-	removedSubtasks := state.checkRemoveSubtasks()
-	hasNewSubtasks := len(addedSubtasks) > 0
+	checkNewSubtasksResult := state.checkNewSubtasks()
+
+	hasExplicitTasks := checkNewSubtasksResult.hasExplicitTasks
+	addedSubtasks := checkNewSubtasksResult.newSubtasks
+
+	checkRemoveSubtasksResult := state.checkRemoveSubtasks()
+
+	removedSubtasks := checkRemoveSubtasksResult.removedSubtasks
+	hasExplicitRemoveTasks := checkRemoveSubtasksResult.hasExplicitRemoveTasks
 
 	log.Println("removedSubtasks:\n", spew.Sdump(removedSubtasks))
 	log.Println("addedSubtasks:\n", spew.Sdump(addedSubtasks))
-	log.Println("hasNewSubtasks:\n", hasNewSubtasks)
+	log.Println("hasNewSubtasks:\n", hasExplicitTasks)
 
 	handleDescAndExecStatusRes := state.handleDescAndExecStatus()
 	if handleDescAndExecStatusRes.shouldContinueMainLoop || handleDescAndExecStatusRes.shouldReturn {
@@ -90,7 +98,7 @@ func (state *activeTellStreamState) handleStreamFinished() handleStreamFinishedR
 		replyOperations:       replyOperations,
 		generatedDescription:  generatedDescription,
 		subtaskFinished:       subtaskFinished,
-		hasNewSubtasks:        hasNewSubtasks,
+		hasNewSubtasks:        hasExplicitTasks,
 		autoLoadContextResult: autoLoadContextResult,
 		addedSubtasks:         addedSubtasks,
 		removedSubtasks:       removedSubtasks,
@@ -106,7 +114,19 @@ func (state *activeTellStreamState) handleStreamFinished() handleStreamFinishedR
 	log.Println("summarizing convo in background")
 	// summarize in the background
 	go func() {
-		err := summarizeConvo(clients, settings.ModelPack.PlanSummary, summarizeConvoParams{
+
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("panic in summarizeConvo: %v\n%s", r, debug.Stack())
+				active.StreamDoneCh <- &shared.ApiError{
+					Type:   shared.ApiErrorTypeOther,
+					Status: http.StatusInternalServerError,
+					Msg:    fmt.Sprintf("Error summarizing convo: %v", r),
+				}
+			}
+		}()
+
+		err := summarizeConvo(clients, authVars, settings, summarizeConvoParams{
 			auth:                  auth,
 			plan:                  plan,
 			branch:                branch,
@@ -116,7 +136,7 @@ func (state *activeTellStreamState) handleStreamFinished() handleStreamFinishedR
 			currentOrgId:          currentOrgId,
 			currentReply:          active.CurrentReplyContent,
 			currentReplyNumTokens: active.NumTokens,
-			modelPackName:         settings.ModelPack.Name,
+			modelPackName:         settings.GetModelPack().Name,
 		}, active.SummaryCtx)
 
 		if err != nil {
@@ -142,6 +162,13 @@ func (state *activeTellStreamState) handleStreamFinished() handleStreamFinishedR
 		log.Println("Sending stream message to load context files")
 
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("panic streaming auto-load context: %v\n%s", r, debug.Stack())
+					go notify.NotifyErr(notify.SeverityError, fmt.Errorf("panic streaming auto-load context: %v\n%s", r, debug.Stack()))
+				}
+			}()
+
 			active.Stream(shared.StreamMessage{
 				Type:             shared.StreamMessageLoadContext,
 				LoadContextFiles: autoLoadPaths,
@@ -174,10 +201,10 @@ func (state *activeTellStreamState) handleStreamFinished() handleStreamFinishedR
 	}
 
 	willContinue := state.willContinuePlan(willContinuePlanParams{
-		hasNewSubtasks:      hasNewSubtasks,
+		hasNewSubtasks:      hasExplicitTasks,
 		allSubtasksFinished: allSubtasksFinished,
 		activatePaths:       autoLoadContextResult.activatePaths,
-		removedSubtasks:     len(removedSubtasks) > 0,
+		removedSubtasks:     hasExplicitRemoveTasks,
 		hasExplicitPaths:    autoLoadContextResult.hasExplicitPaths,
 	})
 
@@ -191,6 +218,7 @@ func (state *activeTellStreamState) handleStreamFinished() handleStreamFinishedR
 			auth:      auth,
 			req:       req,
 			iteration: iteration + 1,
+			authVars:  authVars,
 		})
 	} else {
 		var buildFinished bool
@@ -227,7 +255,7 @@ func (state *activeTellStreamState) handleStreamFinished() handleStreamFinishedR
 				active.StreamDoneCh <- &shared.ApiError{
 					Type:   shared.ApiErrorTypeOther,
 					Status: http.StatusInternalServerError,
-					Msg:    "Error setting plan status to building",
+					Msg:    fmt.Sprintf("Error setting plan status to building: %v", err),
 				}
 
 				return handleStreamFinishedResult{

@@ -103,6 +103,30 @@ gpt4cli tell "Generate a Python script to scrape news headlines."
 
 🔗 **[Setup Development Environment](https://gpt4cli.khulnasoft.com/development)**
 
+### 🛠️ Quick Development Setup
+
+Want to contribute? Get started in minutes:
+
+```bash
+# Clone and setup
+git clone <repository-url>
+cd gpt4cli-1
+
+# Interactive setup (recommended)
+./scripts/dev-setup.sh
+
+# Or quick start with Docker
+make quick-start
+
+# Or setup manually
+make setup
+make install
+make dev
+
+# Configure environment variables
+cp .env.example .env
+# Edit .env with your API keys and settings
+
 💖 Big thanks to all our contributors!
 
 ---

@@ -2,7 +2,9 @@ package plan
 
 import (
 	"context"
+	"fmt"
 	"gpt4cli-server/db"
+	"gpt4cli-server/notify"
 	"gpt4cli-server/shutdown"
 	"gpt4cli-server/types"
 	"log"
@@ -59,6 +61,8 @@ func CreateActivePlan(orgId, userId, planId, branch, prompt string, buildOnly, a
 					return
 				} else {
 					log.Printf("Error streaming plan %s: %v\n", planId, apiErr)
+
+					go notify.NotifyErr(notify.SeverityError, fmt.Errorf("error streaming plan %s: %v", planId, apiErr))
 
 					err := db.SetPlanStatus(planId, branch, shared.PlanStatusError, apiErr.Msg)
 					if err != nil {

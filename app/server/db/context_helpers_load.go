@@ -7,6 +7,8 @@ import (
 	"fmt"
 	shared "gpt4cli-shared"
 	"log"
+	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync"
 
@@ -77,7 +79,7 @@ func LoadContexts(ctx Ctx, params LoadContextsParams) (*shared.LoadContextRespon
 	totalBasicPlannerTokens := 0
 	totalMapTokens := 0
 
-	settings, err := GetPlanSettings(plan, true)
+	settings, err := GetPlanSettings(plan)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error getting settings: %v", err)
 	}
@@ -289,6 +291,13 @@ func LoadContexts(ctx Ctx, params LoadContextsParams) (*shared.LoadContextRespon
 	for tempId, loadParams := range paramsByTempId {
 
 		go func(tempId string, loadParams *shared.LoadContextParams) {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("panic in LoadContexts: %v\n%s", r, debug.Stack())
+					errCh <- fmt.Errorf("panic in LoadContexts: %v\n%s", r, debug.Stack())
+					runtime.Goexit() // don't allow outer function to continue and double-send to channel
+				}
+			}()
 			hash := sha256.Sum256([]byte(loadParams.Body))
 			sha := hex.EncodeToString(hash[:])
 

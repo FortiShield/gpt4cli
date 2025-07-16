@@ -5,6 +5,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	shared "gpt4cli-shared"
+	"log"
+	"runtime"
+	"runtime/debug"
 	"sync"
 )
 
@@ -45,7 +48,7 @@ func UpdateContexts(params UpdateContextsParams) (*shared.UpdateContextResponse,
 		}
 	}
 
-	settings, err := GetPlanSettings(plan, true)
+	settings, err := GetPlanSettings(plan)
 	if err != nil {
 		return nil, fmt.Errorf("error getting settings: %v", err)
 	}
@@ -53,6 +56,16 @@ func UpdateContexts(params UpdateContextsParams) (*shared.UpdateContextResponse,
 	planConfig, err := GetPlanConfig(planId)
 	if err != nil {
 		return nil, fmt.Errorf("error getting plan config: %v", err)
+	}
+
+	modelPacks, err := ListModelPacks(orgId)
+	if err != nil {
+		return nil, fmt.Errorf("error getting model packs: %v", err)
+	}
+
+	apiModelPacks := make([]*shared.ModelPack, len(modelPacks))
+	for i, modelPack := range modelPacks {
+		apiModelPacks[i] = modelPack.ToApi()
 	}
 
 	plannerMaxTokens := settings.GetPlannerEffectiveMaxTokens()
@@ -126,6 +139,13 @@ func UpdateContexts(params UpdateContextsParams) (*shared.UpdateContextResponse,
 
 	for id, params := range *req {
 		go func(id string, params *shared.UpdateContextParams) {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("panic in UpdateContexts: %v\n%s", r, debug.Stack())
+					errCh <- fmt.Errorf("panic in UpdateContexts: %v\n%s", r, debug.Stack())
+					runtime.Goexit() // don't allow outer function to continue and double-send to channel
+				}
+			}()
 			var context *Context
 			if _, ok := contextsById[id]; ok {
 				context = contextsById[id]
@@ -229,6 +249,13 @@ func UpdateContexts(params UpdateContextsParams) (*shared.UpdateContextResponse,
 
 	for id, params := range *req {
 		go func(id string, params *shared.UpdateContextParams) {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("panic in UpdateContexts: %v\n%s", r, debug.Stack())
+					errCh <- fmt.Errorf("panic in UpdateContexts: %v\n%s", r, debug.Stack())
+					runtime.Goexit() // don't allow outer function to continue and double-send to channel
+				}
+			}()
 			context := contextsById[id]
 
 			if context.ContextType == shared.ContextMapType {

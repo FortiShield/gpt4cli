@@ -186,7 +186,7 @@ func promptSignInNewAccount() error {
 		}
 
 		if selected == SignInLocalOption {
-			email = "local-admin@gpt4cli.ai"
+			email = "local-admin@khulnasoft.com"
 		} else {
 			email, err = term.GetRequiredUserStringInput("Your email:")
 		}
